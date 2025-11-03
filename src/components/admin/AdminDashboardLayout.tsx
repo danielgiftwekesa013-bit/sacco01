@@ -9,6 +9,7 @@ import AdminShares from "@/components/admin/AdminShares";
 import AdminLoans from "@/components/admin/AdminLoans";
 import AdminDailyDeposits from "@/components/admin/AdminDailyDeposits";
 import AdminDeductions from "@/components/admin/AdminDeductions";
+import AdminCashAnalysis from "@/components/admin/AdminCashAnalysis";
 
 interface AdminDashboardLayoutProps {
   onLogout: () => void;
@@ -33,6 +34,8 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
         return <AdminDailyDeposits />;
       case "deductions":
         return <AdminDeductions />;
+      case "cash-analysis":
+        return <AdminCashAnalysis />;
       default:
         return <AdminDashboardOverview />;
     }

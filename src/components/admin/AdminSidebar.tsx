@@ -6,6 +6,7 @@ import {
   Wallet,
   Calendar,
   AlertCircle,
+  TrendingUp,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,6 +34,7 @@ const AdminSidebar = ({ activeSection, onSectionChange }: AdminSidebarProps) => 
     { id: "loans", label: "Loans", icon: Wallet },
     { id: "daily-deposits", label: "Daily Deposits", icon: Calendar },
     { id: "deductions", label: "Deductions", icon: AlertCircle },
+    { id: "cash-analysis", label: "Cash Analysis", icon: TrendingUp },
   ];
 
   return (
