@@ -17,11 +17,15 @@ const Footer = () => {
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="h-4 w-4 text-primary" />
-                <span>+254 xxx xxx xxx</span>
+                <span>+254 724 755 416</span>
+              </div>
+               <div className="flex items-center gap-2 text-sm">
+                <Phone className="h-4 w-4 text-primary" />
+                <span>+254 726 785 620</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Mail className="h-4 w-4 text-secondary" />
-                <span>info@transpiaggiosacco.co.ke</span>
+                <span>transpiaggiosacco@gmail.com</span>
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <MapPin className="h-4 w-4 text-tertiary" />

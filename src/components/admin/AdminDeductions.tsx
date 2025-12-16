@@ -1,125 +1,261 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/components/ui/use-toast";
 
 const AdminDeductions = () => {
-  const nhifDeductions = [
-    { member: "John Doe", amount: 1500, date: "2025-01-15" },
-    { member: "Jane Smith", amount: 1500, date: "2025-01-15" },
-  ];
+  const { toast } = useToast();
 
-  const shaaDeductions = [
-    { member: "John Doe", amount: 2000, date: "2025-01-15" },
-    { member: "Jane Smith", amount: 2000, date: "2025-01-15" },
-  ];
+  /* ================= SETTINGS ================= */
+  const [currentSettings, setCurrentSettings] = useState<any>(null);
+  const [shaaFee, setShaaFee] = useState("");
+  const [fineFee, setFineFee] = useState("");
+  const [transferFee, setTransferFee] = useState("");
 
-  const fines = [
-    { member: "Peter Wanjala", amount: 10, reason: "Late deposit", date: "2025-01-19" },
-    { member: "Mary Akinyi", amount: 20, reason: "Late deposit (2 days)", date: "2025-01-18" },
-  ];
+  /* ================= MEMBERS ================= */
+  const [members, setMembers] = useState<any[]>([]);
+  const [applyAll, setApplyAll] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [loadingApply, setLoadingApply] = useState(false);
+
+  /* ================= FETCH LATEST SETTINGS ================= */
+  const fetchLatestSettings = async () => {
+    const { data, error } = await supabase
+      .from("settings")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (!error && data?.length) {
+      setCurrentSettings(data[0]);
+    }
+  };
+
+  /* ================= FETCH MEMBERS ================= */
+  const fetchMembers = async () => {
+    const { data } = await supabase
+      .from("userprofiles")
+      .select("id, user_name")
+      .order("user_name");
+
+    setMembers(data || []);
+  };
+
+  useEffect(() => {
+    fetchLatestSettings();
+    fetchMembers();
+  }, []);
+
+  /* ================= SAVE SETTINGS ================= */
+  const saveSettings = async () => {
+    if (!shaaFee && !fineFee && !transferFee) {
+      toast({
+        title: "Nothing to save",
+        description: "Enter at least one value",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error } = await supabase.from("settings").insert({
+      shaa_fee: Number(shaaFee) || 0,
+      fine_fee: Number(fineFee) || 0,
+      share_transfer_fee: Number(transferFee) || 0,
+    });
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Settings saved successfully",
+    });
+
+    setShaaFee("");
+    setFineFee("");
+    setTransferFee("");
+    fetchLatestSettings();
+  };
+
+  /* ================= APPLY SHAA ================= */
+  const applyShaaFee = async () => {
+    if (!currentSettings?.shaa_fee) {
+      toast({
+        title: "Error",
+        description: "No SHAA fee found in settings",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const targetMembers = applyAll
+      ? members.map((m) => m.id)
+      : selectedMembers;
+
+    if (!targetMembers.length) {
+      toast({
+        title: "Error",
+        description: "No members selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Apply SHAA fee (KSh ${currentSettings.shaa_fee}) to ${targetMembers.length} member(s)?`
+    );
+
+    if (!confirmed) return;
+
+    setLoadingApply(true);
+
+    const today = new Date().toISOString().split("T")[0];
+
+    const payload = targetMembers.map((memberId) => ({
+      member_id: memberId,
+      shaa_fee: currentSettings.shaa_fee,
+      date: today,
+    }));
+
+    const { error } = await supabase.from("deductions").insert(payload);
+
+    setLoadingApply(false);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "SHAA fee applied successfully",
+    });
+
+    setSelectedMembers([]);
+    setApplyAll(false);
+  };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold">Deductions Management</h2>
-        <p className="text-muted-foreground">Track NHIF, SHAA, and fines</p>
-      </div>
+      <h1 className="text-3xl font-bold">Deductions Management</h1>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">NHIF Deductions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">KSh 3,000</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">SHAA Deductions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">KSh 4,000</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Total Fines</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-destructive">KSh 30</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="nhif">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="nhif">NHIF</TabsTrigger>
-          <TabsTrigger value="shaa">SHAA</TabsTrigger>
-          <TabsTrigger value="fines">Fines</TabsTrigger>
+      <Tabs defaultValue="settings">
+        <TabsList className="grid grid-cols-2 w-full">
+          <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="apply">Apply SHAA</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="nhif">
+        {/* ================= SETTINGS ================= */}
+        <TabsContent value="settings">
           <Card>
             <CardHeader>
-              <CardTitle>NHIF Deductions</CardTitle>
+              <CardTitle>System Settings</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {nhifDeductions.map((deduction, index) => (
-                  <div key={index} className="flex items-center justify-between border-b pb-3 last:border-0">
-                    <div>
-                      <p className="font-medium">{deduction.member}</p>
-                      <p className="text-sm text-muted-foreground">{deduction.date}</p>
-                    </div>
-                    <p className="font-semibold">KSh {deduction.amount.toLocaleString()}</p>
-                  </div>
-                ))}
-              </div>
+            <CardContent className="space-y-4">
+              {currentSettings && (
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>Current SHAA Fee: KSh {currentSettings.shaa_fee}</p>
+                  <p>Current Fine Fee: KSh {currentSettings.fine_fee}</p>
+                  <p>Current Transfer Fee: KSh {currentSettings.share_transfer_fee}</p>
+                </div>
+              )}
+
+              <Input
+                type="number"
+                placeholder="SHAA Fee"
+                value={shaaFee}
+                onChange={(e) => setShaaFee(e.target.value)}
+              />
+              <Input
+                type="number"
+                placeholder="Fine Fee"
+                value={fineFee}
+                onChange={(e) => setFineFee(e.target.value)}
+              />
+              <Input
+                type="number"
+                placeholder="Transfer Fee"
+                value={transferFee}
+                onChange={(e) => setTransferFee(e.target.value)}
+              />
+
+              <Button onClick={saveSettings}>Save Settings</Button>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="shaa">
+        {/* ================= APPLY SHAA ================= */}
+        <TabsContent value="apply">
           <Card>
             <CardHeader>
-              <CardTitle>SHAA Deductions</CardTitle>
+              <CardTitle>Apply SHAA Fee</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {shaaDeductions.map((deduction, index) => (
-                  <div key={index} className="flex items-center justify-between border-b pb-3 last:border-0">
-                    <div>
-                      <p className="font-medium">{deduction.member}</p>
-                      <p className="text-sm text-muted-foreground">{deduction.date}</p>
-                    </div>
-                    <p className="font-semibold">KSh {deduction.amount.toLocaleString()}</p>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Latest SHAA Fee: <b>KSh {currentSettings?.shaa_fee ?? 0}</b>
+              </p>
 
-        <TabsContent value="fines">
-          <Card>
-            <CardHeader>
-              <CardTitle>Fines</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {fines.map((fine, index) => (
-                  <div key={index} className="flex items-center justify-between border-b pb-3 last:border-0">
-                    <div>
-                      <p className="font-medium">{fine.member}</p>
-                      <p className="text-sm text-muted-foreground">{fine.reason}</p>
-                      <p className="text-xs text-muted-foreground">{fine.date}</p>
-                    </div>
-                    <p className="font-semibold text-destructive">KSh {fine.amount}</p>
-                  </div>
-                ))}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  checked={applyAll}
+                  onCheckedChange={() => {
+                    setApplyAll(!applyAll);
+                    setSelectedMembers([]);
+                  }}
+                />
+                <span>Apply to all members</span>
               </div>
+
+              {!applyAll && (
+                <div className="max-h-64 overflow-y-auto space-y-2 border rounded p-2">
+                  {members.map((m) => (
+                    <div key={m.id} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={selectedMembers.includes(m.id)}
+                        onCheckedChange={() =>
+                          setSelectedMembers((prev) =>
+                            prev.includes(m.id)
+                              ? prev.filter((id) => id !== m.id)
+                              : [...prev, m.id]
+                          )
+                        }
+                      />
+                      <span>{m.user_name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button disabled={loadingApply} onClick={applyShaaFee}>
+                {loadingApply ? "Applying..." : "Apply SHAA Fee"}
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

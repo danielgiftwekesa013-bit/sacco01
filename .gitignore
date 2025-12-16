@@ -21,4 +21,16 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+*.sw?|
+# Environment variables
+.env
+.env.*
+!.env.example
+# Office / temp files
+*.docx
+~$*.docx
+
+# Internal notes
+RLS POLICIES FOR PRODUCTION
+new requirements
+

@@ -8,8 +8,9 @@ import {
   AlertCircle,
   TrendingUp,
 } from "lucide-react";
+
 import {
-  Sidebar,
+  // NOTE: we intentionally use SidebarContent and inner components only.
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
@@ -17,7 +18,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 
 interface AdminSidebarProps {
@@ -38,29 +38,30 @@ const AdminSidebar = ({ activeSection, onSectionChange }: AdminSidebarProps) => 
   ];
 
   return (
-    <Sidebar>
-      <SidebarTrigger className="m-2 self-end" />
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Admin Portal</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    onClick={() => onSectionChange(item.id)}
-                    isActive={activeSection === item.id}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-    </Sidebar>
+    <SidebarContent className="h-full bg-white">
+      <SidebarGroup>
+        <SidebarGroupLabel className="text-lg font-semibold text-primary">
+          Admin Portal
+        </SidebarGroupLabel>
+
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {menuItems.map((item) => (
+              <SidebarMenuItem key={item.id}>
+                <SidebarMenuButton
+                  onClick={() => onSectionChange(item.id)}
+                  isActive={activeSection === item.id}
+                  className="flex items-center gap-3 text-base"
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    </SidebarContent>
   );
 };
 

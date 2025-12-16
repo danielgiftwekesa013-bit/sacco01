@@ -14,16 +14,13 @@ import DepositSection from "@/components/user/DepositSection";
 
 const UserDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
+  const [sidebarOpen, setSidebarOpen] = useState(false); // new
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    navigate("/");
-  };
+  const handleLogout = () => navigate("/");
 
   const renderSection = () => {
     switch (activeSection) {
-      case "dashboard":
-        return <DashboardOverview />;
       case "loans":
         return <LoansSection />;
       case "welfare":
@@ -46,9 +43,20 @@ const UserDashboard = () => {
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full flex-col">
-        <Header isLoggedIn onLogout={handleLogout} />
+        <Header
+          isLoggedIn
+          onLogout={handleLogout}
+          onMenuClick={() => setSidebarOpen(!sidebarOpen)} // toggles sidebar on mobile
+        />
+
         <div className="flex flex-1">
-          <UserSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+          <UserSidebar
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+            isOpen={sidebarOpen} // pass open state
+            onClose={() => setSidebarOpen(false)} // allow sidebar to close on mobile
+          />
+
           <main className="flex-1 overflow-y-auto bg-muted/30 p-4 md:p-6">
             {renderSection()}
           </main>
