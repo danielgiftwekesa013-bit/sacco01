@@ -33,21 +33,49 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { phone, total, payment_id } = req.body;
+    const { phone, total, member_id, breakdown, payment_for, related_id } = req.body;
 
-    if (!phone || !total || !payment_id) {
-      return res.status(400).json({ success: false, message: "Missing fields" });
+    if (!phone || !total || !member_id) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
-    let normalizedPhone = String(phone);
+    // Normalize Kenyan phone
+    let normalizedPhone = String(phone).trim();
     if (normalizedPhone.startsWith("0")) normalizedPhone = `254${normalizedPhone.slice(1)}`;
     if (normalizedPhone.startsWith("+")) normalizedPhone = normalizedPhone.slice(1);
 
+    // 1️⃣ Insert pending STK request row first
+    const { data: reqRow, error: insertError } = await supabase
+      .from("mpesa_stk_requests")
+      .insert([
+        {
+          member_id,
+          amount: total,
+          phone: normalizedPhone,
+          payment_for: payment_for || "MixedPayment",
+          related_id: related_id || null,
+          breakdown: breakdown || {},
+          status: "Pending",
+        },
+      ])
+      .select()
+      .single();
+
+    if (insertError || !reqRow) {
+      console.error("Failed to create STK request row:", insertError);
+      throw insertError || new Error("Could not create STK request row");
+    }
+
+    console.log("Created STK request row:", reqRow);
+
+    // 2️⃣ Generate MPESA access token
     const accessToken = await getAccessToken();
+
+    // 3️⃣ Prepare STK push request
     const timestamp = dayjs().format("YYYYMMDDHHmmss");
     const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString("base64");
 
-    const response = await axios.post(
+    const stkResponse = await axios.post(
       `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
       {
         BusinessShortCode: MPESA_SHORTCODE,
@@ -59,20 +87,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         PartyB: MPESA_SHORTCODE,
         PhoneNumber: normalizedPhone,
         CallBackURL: MPESA_CALLBACK_URL,
-        AccountReference: payment_id,
+        AccountReference: reqRow.id, // use the newly inserted row ID for callback reference
         TransactionDesc: "SACCO Payment",
       },
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    const checkoutRequestID = response.data.CheckoutRequestID;
+    const checkoutRequestID = stkResponse.data.CheckoutRequestID;
 
+    // 4️⃣ Update the STK request row with checkoutRequestID immediately
     await supabase
       .from("mpesa_stk_requests")
       .update({ checkout_request_id: checkoutRequestID })
-      .eq("id", payment_id);
+      .eq("id", reqRow.id);
 
-    return res.json({ success: true, checkoutRequestID });
+    console.log("Updated STK request with CheckoutRequestID:", checkoutRequestID);
+
+    // ✅ Return response to frontend
+    return res.status(200).json({ success: true, checkoutRequestID });
   } catch (err: any) {
     console.error("STK Push error:", err);
     return res.status(500).json({ success: false, message: err.message });
