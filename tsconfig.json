@@ -1,21 +1,32 @@
 {
   "files": [],
+
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
   ],
+
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
+
     "noImplicitAny": false,
     "noUnusedParameters": false,
-    "skipLibCheck": true,
-    "allowJs": true,
     "noUnusedLocals": false,
     "strictNullChecks": false,
+
+    "skipLibCheck": true,
+    "allowJs": true,
     "moduleResolution": "Node",
     "esModuleInterop": true
-  }
+  },
+
+  // 🔴 THIS IS THE IMPORTANT PART
+  "exclude": [
+    "api",
+    "node_modules",
+    "dist"
+  ]
 }
