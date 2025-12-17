@@ -1,4 +1,4 @@
-// api/payments/callback.ts
+// api/payments/Callback.ts
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
@@ -34,7 +34,6 @@ function extractCallback(payload: MpesaRaw) {
   const CheckoutRequestID =
     cb?.CheckoutRequestID ??
     cb?.checkoutRequestID ??
-    cb?.CheckoutRequestID ??
     null;
 
   const MerchantRequestID =
@@ -64,7 +63,10 @@ function extractCallback(payload: MpesaRaw) {
     cb?.PhoneNumber ?? findItem("PhoneNumber") ?? findItem("MSISDN") ?? null;
 
   const TransactionDate =
-    cb?.TransactionDate ?? findItem("TransactionDate") ?? findItem("Transaction") ?? null;
+    cb?.TransactionDate ??
+    findItem("TransactionDate") ??
+    findItem("Transaction") ??
+    null;
 
   return {
     CheckoutRequestID,
@@ -97,7 +99,7 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       throw new Error("Missing CheckoutRequestID");
     }
 
-    // 1) Fetch STK request
+    // 1️⃣ Fetch STK request
     const { data: stkRow, error: stkError } = await supabase
       .from("mpesa_stk_requests")
       .select("*")
@@ -105,22 +107,18 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       .single();
 
     if (stkError || !stkRow) {
-      console.error(
-        "STK request not found:",
-        CheckoutRequestID,
-        stkError
-      );
+      console.error("STK request not found:", CheckoutRequestID, stkError);
       throw new Error("STK request not found");
     }
 
-    // 2) Update STK status
+    // 2️⃣ Update STK status
     const status = ResultCode === 0 ? "Success" : "Failed";
     await supabase
       .from("mpesa_stk_requests")
       .update({ status })
       .eq("id", stkRow.id);
 
-    // 3) Insert MPESA payment
+    // 3️⃣ Insert MPESA payment
     const allowedPaymentFors = [
       "DailyDeposit",
       "LoanRepayment",
@@ -170,14 +168,13 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
     }
 
     if (status !== "Success") {
-      return { status: "Failed", reason: ResultDesc };
+      return;
     }
 
-    // 4) Allocation logic
+    // 4️⃣ Allocation logic
     const breakdown: Breakdown = stkRow.breakdown || {};
     const ledgerInserts: any[] = [];
 
-    // 4a) Daily Deposit
     if (breakdown.dailyDeposit && breakdown.dailyDeposit > 0) {
       await supabase.from("dailydeposits").insert({
         member_id: stkRow.member_id,
@@ -192,7 +189,6 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       });
     }
 
-    // 4b) Loan Repayment
     if (
       breakdown.loanRepayment &&
       breakdown.loanRepayment.amount > 0 &&
@@ -232,7 +228,6 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       });
     }
 
-    // 4c) Shares
     if (breakdown.shares && breakdown.shares > 0) {
       await supabase.from("shares").insert({
         member_id: stkRow.member_id,
@@ -248,7 +243,6 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       });
     }
 
-    // 4d) Membership
     if (breakdown.membership && breakdown.membership > 0) {
       const { error } = await supabase.from("membership").insert({
         member_id: stkRow.member_id,
@@ -266,7 +260,6 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       }
     }
 
-    // 4e) Welfare
     if (breakdown.welfare && breakdown.welfare > 0) {
       await supabase.from("wellfare").insert({
         member_id: stkRow.member_id,
@@ -282,25 +275,11 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       });
     }
 
-    // 5) Ledger insert
     if (ledgerInserts.length > 0) {
-      const { error } = await supabase
-        .from("payments_ledger")
-        .insert(ledgerInserts);
-
-      if (error) {
-        console.error("payments_ledger insert failed:", error);
-      }
+      await supabase.from("payments_ledger").insert(ledgerInserts);
     }
-
-    return {
-      status: "Success",
-      mpesaPayment,
-      allocated: ledgerInserts.length,
-    };
-  } catch (err: any) {
-    console.error("Error processing MPESA callback:", err);
-    throw err;
+  } catch (err) {
+    console.error("ASYNC MPESA CALLBACK ERROR:", err);
   }
 }
 
@@ -309,24 +288,15 @@ export default async function handler(
   res: VercelResponse
 ) {
   if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
+    return res.status(405).end();
   }
 
-  try {
-    await processMpesaCallback(req.body);
+  // ✅ ACK MPESA IMMEDIATELY
+  res.status(200).json({
+    ResultCode: 0,
+    ResultDesc: "Accepted",
+  });
 
-    // ✅ MPESA expects HTTP 200 ALWAYS
-    return res.status(200).json({
-      ResultCode: 0,
-      ResultDesc: "Accepted",
-    });
-  } catch (err: any) {
-    console.error("MPESA CALLBACK ERROR:", err);
-
-    // ❗ STILL return 200, but failure code
-    return res.status(200).json({
-      ResultCode: 1,
-      ResultDesc: err.message ?? "Failed",
-    });
-  }
+  // ⏳ Process in background (DO NOT await)
+  processMpesaCallback(req.body);
 }
