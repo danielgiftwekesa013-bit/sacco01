@@ -279,7 +279,8 @@ async function processMpesaCallback(rawPayload: MpesaRaw) {
       await supabase.from("payments_ledger").insert(ledgerInserts);
     }
   } catch (err) {
-    console.error("ASYNC MPESA CALLBACK ERROR:", err);
+    console.error("MPESA CALLBACK PROCESSING ERROR:", err);
+    throw err;
   }
 }
 
@@ -291,12 +292,22 @@ export default async function handler(
     return res.status(405).end();
   }
 
-  // ✅ ACK MPESA IMMEDIATELY
-  res.status(200).json({
-    ResultCode: 0,
-    ResultDesc: "Accepted",
-  });
+  try {
+    // ⏳ PROCESS FIRST (VERCEL SAFE)
+    await processMpesaCallback(req.body);
 
-  // ⏳ Process in background (DO NOT await)
-  processMpesaCallback(req.body);
+    // ✅ ACK MPESA
+    return res.status(200).json({
+      ResultCode: 0,
+      ResultDesc: "Accepted",
+    });
+  } catch (err: any) {
+    console.error("MPESA CALLBACK ERROR:", err);
+
+    // ⚠️ STILL ACK MPESA WITH 200
+    return res.status(200).json({
+      ResultCode: 1,
+      ResultDesc: err?.message ?? "Failed",
+    });
+  }
 }
