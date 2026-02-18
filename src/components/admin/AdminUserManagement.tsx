@@ -16,7 +16,9 @@ const AdminUserManagement = () => {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/create-user", {
+      // Use absolute URL based on environment
+      const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+      const res = await fetch(`${baseUrl}/api/create-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_name: name, phone, id_no: idNo }),
@@ -39,30 +41,35 @@ const AdminUserManagement = () => {
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-xl font-bold mb-4">Admin User Management</h2>
-      <div className="space-y-4 max-w-md">
+    <div className="p-6 max-w-2xl mx-auto">
+      <h2 className="text-2xl font-bold mb-6 text-center md:text-left">
+        Admin User Management
+      </h2>
+
+      <div className="bg-white shadow-md rounded-lg p-6 space-y-4">
         <input
-          className="w-full p-2 border rounded"
+          className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
           placeholder="Full Name"
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
         <input
-          className="w-full p-2 border rounded"
+          className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
           placeholder="Phone (optional)"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
         <input
-          className="w-full p-2 border rounded"
+          className="w-full p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-400"
           placeholder="ID Number"
           value={idNo}
           onChange={(e) => setIdNo(e.target.value)}
         />
 
         <button
-          className="w-full bg-yellow-500 text-black p-2 rounded font-semibold"
+          className={`w-full bg-yellow-500 text-black p-3 rounded font-semibold transition hover:bg-yellow-600 ${
+            loading ? "opacity-70 cursor-not-allowed" : ""
+          }`}
           onClick={handleCreateUser}
           disabled={loading}
         >
