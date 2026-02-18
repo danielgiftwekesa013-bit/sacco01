@@ -31,7 +31,7 @@ const AdminUserManagement = () => {
       setPhone("");
       setIdNo("");
     } catch (err: any) {
-      console.error(err);
+      console.error("Create user failed:", err);
       toast.error(err.message || "Something went wrong");
     } finally {
       setLoading(false);
