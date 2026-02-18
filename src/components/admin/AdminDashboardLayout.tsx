@@ -12,6 +12,10 @@ import AdminDailyDeposits from "@/components/admin/AdminDailyDeposits";
 import AdminDeductions from "@/components/admin/AdminDeductions";
 import AdminCashAnalysis from "@/components/admin/AdminCashAnalysis";
 
+// NEW Pages
+//import AdminCashflow from "@/components/admin/AdminCashflow";
+import AdminUserManagement from "@/components/admin/AdminUserManagement";
+
 interface AdminDashboardLayoutProps {
   onLogout: () => void;
 }
@@ -23,7 +27,6 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  // Close sidebar when clicking outside (mobile only)
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (
@@ -57,6 +60,10 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
         return <AdminDeductions />;
       case "cash-analysis":
         return <AdminCashAnalysis />;
+      case "cashflow":
+        return <AdminCashflow />;
+      case "user-management":
+        return <AdminUserManagement />;
       default:
         return <AdminDashboardOverview />;
     }
@@ -64,7 +71,7 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full flex-col bg-muted/20">
+      <div className="flex min-h-screen w-full flex-col bg-black/90 text-yellow-400">
         {/* Header */}
         <Header
           isLoggedIn
@@ -73,7 +80,6 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
         />
 
         <div className="flex flex-1 relative">
-          {/* --- Mobile Sidebar Overlay --- */}
           {isSidebarOpen && (
             <div
               className="fixed inset-0 z-40 bg-black/40 md:hidden"
@@ -81,11 +87,10 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
             />
           )}
 
-          {/* --- Sidebar --- */}
+          {/* Sidebar */}
           <div
             ref={sidebarRef}
-            className={`
-              fixed top-20 left-0 z-50 h-[calc(100vh-80px)] w-64 bg-white shadow-lg
+            className={`fixed top-20 left-0 z-50 h-[calc(100vh-80px)] w-64 shadow-lg
               transform transition-transform duration-300
               ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}
               md:translate-x-0 overflow-y-auto
@@ -100,7 +105,7 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
             />
           </div>
 
-          {/* --- Main content --- */}
+          {/* Main content */}
           <main className="flex-1 overflow-y-auto p-4 md:p-6 md:ml-64">
             {renderSection()}
           </main>
