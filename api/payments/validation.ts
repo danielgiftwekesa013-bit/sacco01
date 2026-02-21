@@ -60,7 +60,7 @@ export default async function handler(
 
     // ✅ Member exists → accept transaction
     return res.status(200).json({
-      ResultCode: "0",
+      ResultCode: 0,
       ResultDesc: "Accepted",
     });
   } catch (err) {
