@@ -6,6 +6,7 @@ import {
   Users,
   Calendar,
   AlertCircle,
+  TrendingUp,
   ArrowUpCircle,
 } from "lucide-react";
 
@@ -36,6 +37,7 @@ const UserSidebar = ({ activeSection, onSectionChange, isOpen, onClose }: UserSi
     { id: "membership", label: "Membership", icon: Users },
     { id: "daily-deposit", label: "Daily Deposit", icon: Calendar },
     { id: "deductions", label: "Deductions", icon: AlertCircle },
+    { id: "financial-reports", label: "Financial Reports", icon: TrendingUp, },
     { id: "deposit", label: "Make Deposit", icon: ArrowUpCircle },
   ];
 

@@ -11,6 +11,7 @@ import MembershipSection from "@/components/user/MembershipSection";
 import DailyDepositSection from "@/components/user/DailyDepositSection";
 import DeductionsSection from "@/components/user/DeductionsSection";
 import DepositSection from "@/components/user/DepositSection";
+import FinancialReports from "@/components/user/FinancialReports";
 
 const UserDashboard = () => {
   const [activeSection, setActiveSection] = useState("dashboard");
@@ -33,6 +34,8 @@ const UserDashboard = () => {
         return <DailyDepositSection />;
       case "deductions":
         return <DeductionsSection />;
+      case "financial-reports":
+        return <FinancialReports />;
       case "deposit":
         return <DepositSection />;
       default:

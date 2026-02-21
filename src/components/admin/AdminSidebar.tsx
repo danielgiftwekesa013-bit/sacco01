@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import {
+  // NOTE: we intentionally use SidebarContent and inner components only.
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
@@ -41,9 +42,9 @@ const AdminSidebar = ({ activeSection, onSectionChange }: AdminSidebarProps) => 
   ];
 
   return (
-    <SidebarContent className="h-full bg-black text-yellow-400">
+    <SidebarContent className="h-full bg-white">
       <SidebarGroup>
-        <SidebarGroupLabel className="text-lg font-semibold text-yellow-400">
+        <SidebarGroupLabel className="text-lg font-semibold text-primary">
           Admin Portal
         </SidebarGroupLabel>
 
@@ -54,9 +55,7 @@ const AdminSidebar = ({ activeSection, onSectionChange }: AdminSidebarProps) => 
                 <SidebarMenuButton
                   onClick={() => onSectionChange(item.id)}
                   isActive={activeSection === item.id}
-                  className={`flex items-center gap-3 text-base ${
-                    activeSection === item.id ? "bg-yellow-400 text-black" : ""
-                  }`}
+                  className="flex items-center gap-3 text-base"
                 >
                   <item.icon className="h-4 w-4" />
                   <span>{item.label}</span>

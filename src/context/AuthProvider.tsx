@@ -3,99 +3,83 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 interface AuthContextType {
-  user: any; // your actual member info from userprofiles
+  user: any;
+  session: any;
   loading: boolean;
-  login: (member_no: string, id_no: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  session: null,
   loading: true,
   login: async () => {},
   signOut: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [session, setSession] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize Supabase session
   useEffect(() => {
-    const init = async () => {
+    const initSession = async () => {
       const { data } = await supabase.auth.getSession();
-      if (data.session) {
-        // Optionally fetch your member profile linked to this email
-        const { data: member } = await supabase
-          .from("userprofiles")
-          .select("*")
-          .eq("email_address", data.session.user.email)
-          .single();
-        setUser(member);
-      }
+      setSession(data.session);
+      setUser(data.session?.user ?? null);
       setLoading(false);
     };
-    init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const { data: member } = await supabase
-          .from("userprofiles")
-          .select("*")
-          .eq("email_address", session.user.email)
-          .single();
-        setUser(member);
-      } else {
-        setUser(null);
-      }
+    initSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => subscription.unsubscribe();
   }, []);
 
-  // 🔥 Login only checks for existing accounts
-  const login = async (member_no: string, id_no: string) => {
-    setLoading(true);
+  // 🔥 HYBRID LOGIN (email OR member number)
+  const login = async (identifier: string, password: string) => {
+    let emailToUse = identifier;
 
-    try {
-      // 1️⃣ Check the member exists in userprofiles
-      const { data: member, error } = await supabase
+    // If it doesn't look like an email → treat as member number
+    if (!identifier.includes("@")) {
+      const { data, error } = await supabase
         .from("userprofiles")
-        .select("*")
-        .eq("member_no", member_no.toUpperCase())
-        .eq("id_no", id_no)
+        .select("email_address")
+        .eq("member_no", identifier)
         .single();
 
-      if (error || !member) throw new Error("Invalid member_no or ID number");
+      if (error || !data?.email_address) {
+        throw new Error("Invalid login credentials");
+      }
 
-      // 2️⃣ Ensure the member has an email registered in Supabase Auth
-      if (!member.email_address) throw new Error("No login email found. Contact admin.");
+      emailToUse = data.email_address;
+    }
 
-      // 3️⃣ Sign in using the email in Supabase Auth
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: member.email_address,
-        password: id_no, // ID number as password
-      });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: emailToUse,
+      password,
+    });
 
-      if (loginError) throw loginError;
-
-      // 4️⃣ Set your member info in context
-      setUser(member);
-
-    } catch (err: any) {
-      throw new Error(err.message || "Login failed");
-    } finally {
-      setLoading(false);
+    if (error) {
+      throw new Error("Invalid login credentials");
     }
   };
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    setSession(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, login, signOut }}>
       {children}
     </AuthContext.Provider>
   );

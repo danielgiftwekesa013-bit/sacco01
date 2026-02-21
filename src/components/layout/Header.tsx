@@ -9,8 +9,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import LoginModal from "@/components/modals/LoginModal";
-import SignUpModal from "@/components/modals/SignUpModal";
-import ForgotPasswordModal from "@/components/modals/ForgotPasswordModal";
+
+
 import ProfileModal from "@/components/modals/ProfileModal";
 import SettingsModal from "@/components/modals/SettingsModal";
 
@@ -22,8 +22,7 @@ interface HeaderProps {
 
 const Header = ({ isLoggedIn = false, onLogout, onMenuClick }: HeaderProps) => {
   const [showLogin, setShowLogin] = useState(false);
-  const [showSignUp, setShowSignUp] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+ 
 
   const [showProfile, setShowProfile] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -61,14 +60,7 @@ const Header = ({ isLoggedIn = false, onLogout, onMenuClick }: HeaderProps) => {
         {/* === RIGHT SIDE AUTH / MENU === */}
         {!isLoggedIn ? (
           <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSignUp(true)}
-              className="hidden sm:inline-flex text-white hover:bg-gray-800"
-            >
-              Create Account
-            </Button>
+            
 
             <Button
               size="sm"
@@ -120,23 +112,7 @@ const Header = ({ isLoggedIn = false, onLogout, onMenuClick }: HeaderProps) => {
         }}
       />
 
-      <SignUpModal
-        open={showSignUp}
-        onOpenChange={setShowSignUp}
-        onLogin={() => {
-          setShowSignUp(false);
-          setShowLogin(true);
-        }}
-      />
-
-      <ForgotPasswordModal
-        open={showForgotPassword}
-        onOpenChange={setShowForgotPassword}
-        onBackToLogin={() => {
-          setShowForgotPassword(false);
-          setShowLogin(true);
-        }}
-      />
+     
     </>
   );
 };

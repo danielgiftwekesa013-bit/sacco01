@@ -73,7 +73,7 @@ const AdminUserManagement = () => {
           onClick={handleCreateUser}
           disabled={loading}
         >
-          {loading ? "Creating..." : "Create User"}
+          {loading ? "Registering..." : "Register Member"}
         </button>
       </div>
     </div>
