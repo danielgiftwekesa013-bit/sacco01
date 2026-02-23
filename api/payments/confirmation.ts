@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY as string
 );
 
-// 🔹 Normalize member number to TPS-0001
+// 🔹 Normalize member number to TPS-0001 format
 function normalizeMemberNo(memberNo: string | null | undefined): string {
   if (!memberNo) return "";
   const cleaned = memberNo.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
@@ -18,18 +18,42 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
-  if (req.method !== "POST") return res.status(405).end();
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
 
   try {
-    const { BillRefNumber, Amount, TransID, Phone, PaymentDate } = req.body;
+    // 🔹 Accept real Safaricom C2B structure
+    const {
+      BillRefNumber,
+      TransAmount,
+      TransID,
+      MSISDN,
+      TransTime,
+    } = req.body;
 
-    if (!BillRefNumber || !Amount || !TransID) {
+    const Amount = Number(TransAmount);
+    const Phone = MSISDN ?? null;
+    const PaymentDate = TransTime
+      ? new Date(
+          `${TransTime.substring(0, 4)}-${TransTime.substring(
+            4,
+            6
+          )}-${TransTime.substring(6, 8)}T${TransTime.substring(
+            8,
+            10
+          )}:${TransTime.substring(10, 12)}:${TransTime.substring(12, 14)}`
+        )
+      : new Date();
+
+    // 🔹 Required validation
+    if (!BillRefNumber || !TransID || !Amount || isNaN(Amount)) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
     const normalizedMemberNo = normalizeMemberNo(BillRefNumber);
 
-    // 1️⃣ Check if member exists
+    // 1️⃣ Check member
     const { data: member, error: memberError } = await supabase
       .from("userprofiles")
       .select("id, member_no")
@@ -45,64 +69,60 @@ export default async function handler(
 
     const memberId = member.id;
 
-    // 2️⃣ Prevent duplicate transaction
+    // 2️⃣ Prevent duplicate transaction safely
     const { data: existingTx } = await supabase
       .from("mpesa_payments")
       .select("id")
       .eq("mpesa_receipt", TransID)
-      .single();
+      .maybeSingle();
 
     if (existingTx) {
       return res.status(200).json({
         ResultCode: "0",
-        ResultDesc: "Accepted", // duplicate acknowledged but not re-inserted
+        ResultDesc: "Accepted",
       });
     }
 
-    // 3️⃣ Insert the offline payment
-    const { data: payment } = await supabase
+    // 3️⃣ Insert payment (payment_for must match DB constraint)
+    const { data: payment, error: paymentError } = await supabase
       .from("mpesa_payments")
       .insert({
         mpesa_receipt: TransID,
-        phone: Phone ?? null,
+        phone: Phone,
         amount: Amount,
-        transaction_date: PaymentDate ? new Date(PaymentDate) : new Date(),
+        transaction_date: PaymentDate,
         status: "Success",
-        payment_for: "MixedPayment",
+        payment_for: "DailyDeposit", // Valid DB enum value
         related_id: memberId,
         raw_callback: req.body,
       })
       .select()
       .single();
 
-    if (!payment) {
+    if (paymentError || !payment) {
       throw new Error("Payment insert failed");
     }
 
-    // 4️⃣ Allocation logic (insert only)
     const ledgerInserts: any[] = [];
 
-    // 4a️⃣ Check membership
+    // 4️⃣ Fetch related data
     const { data: membership } = await supabase
       .from("membership")
       .select("reg_fee, status")
       .eq("member_id", memberId)
-      .single();
+      .maybeSingle();
 
-    // 4b️⃣ Check shares
     const { data: shares } = await supabase
       .from("shares")
-      .select("amount, total_shares")
+      .select("amount")
       .eq("member_id", memberId);
 
-    // 4c️⃣ Check loans
     const { data: loans } = await supabase
       .from("loans")
-      .select("id, status, loan_balance, paid_amount")
+      .select("id, status")
       .eq("member_id", memberId)
       .order("approved_date", { ascending: true });
 
-    // 4d️⃣ Check wellfare
     const { data: wellfare } = await supabase
       .from("wellfare")
       .select("deposit_date, status")
@@ -110,13 +130,17 @@ export default async function handler(
       .order("deposit_date", { ascending: false })
       .limit(1);
 
-    // --- Allocation based on your rules ---
-    // 1️⃣ New member: pay reg_fee first (1000), rest to shares
+    // ----------------------------
+    // 🔥 YOUR ORIGINAL LOGIC (SAFE)
+    // ----------------------------
+
     if (!membership || membership.status !== "paid") {
+      const regAmount = Math.min(Amount, 1000);
+
       ledgerInserts.push({
         member_id: memberId,
         payment_for: "Membership",
-        amount: Math.min(Amount, 1000),
+        amount: regAmount,
         mpesa_payment_id: payment.id,
       });
 
@@ -129,54 +153,70 @@ export default async function handler(
         });
       }
     } else {
-      // Existing member
-      const activeLoans = loans?.filter((l) => l.status === "Active") || [];
-      const sharesPaid = shares?.reduce((acc, s) => acc + Number(s.amount), 0) ?? 0;
+      const activeLoans =
+        loans?.filter((l) => l.status === "Active") ?? [];
+
+      const sharesPaid =
+        shares?.reduce((acc, s) => acc + Number(s.amount), 0) ?? 0;
 
       if (activeLoans.length > 0) {
-        // priority: daily deposit 100, then old loan
+        const daily = Math.min(100, Amount);
+        const loanAmount = Math.max(Amount - daily, 0);
+
         ledgerInserts.push({
           member_id: memberId,
           payment_for: "DailyDeposit",
-          amount: 100,
+          amount: daily,
           mpesa_payment_id: payment.id,
         });
-        ledgerInserts.push({
-          member_id: memberId,
-          payment_for: "LoanRepayment",
-          amount: Amount - 100,
-          related_id: activeLoans[0].id,
-          mpesa_payment_id: payment.id,
-        });
-      } else if (sharesPaid < 12000) {
-        // no loan, shares not fully paid
-        ledgerInserts.push({
-          member_id: memberId,
-          payment_for: "DailyDeposit",
-          amount: 100,
-          mpesa_payment_id: payment.id,
-        });
-        ledgerInserts.push({
-          member_id: memberId,
-          payment_for: "Shares",
-          amount: Amount - 100,
-          mpesa_payment_id: payment.id,
-        });
-      } else {
-        // no loan, shares paid
-        const wellfareLastPaid = wellfare?.[0];
-        if (!wellfareLastPaid || wellfareLastPaid.status !== "paid" || Amount >= 200) {
+
+        if (loanAmount > 0) {
           ledgerInserts.push({
             member_id: memberId,
-            payment_for: "Wellfare",
-            amount: 200,
+            payment_for: "LoanRepayment",
+            amount: loanAmount,
+            related_id: activeLoans[0].id,
             mpesa_payment_id: payment.id,
           });
-          if (Amount > 200) {
+        }
+      } else if (sharesPaid < 12000) {
+        const daily = Math.min(100, Amount);
+        const shareAmount = Math.max(Amount - daily, 0);
+
+        ledgerInserts.push({
+          member_id: memberId,
+          payment_for: "DailyDeposit",
+          amount: daily,
+          mpesa_payment_id: payment.id,
+        });
+
+        if (shareAmount > 0) {
+          ledgerInserts.push({
+            member_id: memberId,
+            payment_for: "Shares",
+            amount: shareAmount,
+            mpesa_payment_id: payment.id,
+          });
+        }
+      } else {
+        const wellfareLastPaid = wellfare?.[0];
+
+        if (!wellfareLastPaid || wellfareLastPaid.status !== "paid") {
+          const welfareAmount = Math.min(200, Amount);
+          const dailyAmount = Math.max(Amount - welfareAmount, 0);
+
+          ledgerInserts.push({
+            member_id: memberId,
+            payment_for: "Welfare",
+            amount: welfareAmount,
+            mpesa_payment_id: payment.id,
+          });
+
+          if (dailyAmount > 0) {
             ledgerInserts.push({
               member_id: memberId,
               payment_for: "DailyDeposit",
-              amount: Amount - 200,
+              amount: dailyAmount,
               mpesa_payment_id: payment.id,
             });
           }
@@ -192,7 +232,13 @@ export default async function handler(
     }
 
     if (ledgerInserts.length > 0) {
-      await supabase.from("payments_ledger").insert(ledgerInserts);
+      const { error: ledgerError } = await supabase
+        .from("payments_ledger")
+        .insert(ledgerInserts);
+
+      if (ledgerError) {
+        throw ledgerError;
+      }
     }
 
     return res.status(200).json({
@@ -201,6 +247,7 @@ export default async function handler(
     });
   } catch (err) {
     console.error("CONFIRMATION ERROR:", err);
+
     return res.status(200).json({
       ResultCode: "1",
       ResultDesc: "Failed",
