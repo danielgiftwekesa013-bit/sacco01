@@ -322,13 +322,15 @@ export default function LoansSection() {
           <h2 className="text-3xl font-bold">Loans</h2>
           <p className="text-muted-foreground">Manage your loans and applications</p>
         </div>
-        <Button
-          onClick={() => setShowApplication((s) => !s)}
-          className="bg-gradient-primary"
-        >
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Apply for Loan
-        </Button>
+       {/* 
+<Button
+  onClick={() => setShowApplication((s) => !s)}
+  className="bg-gradient-primary"
+>
+  <PlusCircle className="mr-2 h-4 w-4" />
+  Apply for Loan
+</Button>
+*/}
       </div>
 
       {/* Application Card (animated reveal) */}

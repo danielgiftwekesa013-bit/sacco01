@@ -19,6 +19,8 @@ const WelfareSection = () => {
 
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [regStatus, setRegStatus] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // ------------------------------------------
   // Load user
@@ -63,6 +65,71 @@ const WelfareSection = () => {
     fetchSummary();
   }, [userId]);
 
+// ------------------------------------------
+// Fetch Registration Status (Latest)
+// ------------------------------------------
+useEffect(() => {
+  if (!userId) return;
+
+  const fetchRegStatus = async () => {
+    const { data } = await supabase
+      .from("wellfare")
+      .select("reg_status")
+      .eq("member_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    setRegStatus(data?.reg_status || "Inactive");
+  };
+
+  fetchRegStatus();
+}, [userId]);
+
+
+// ------------------------------------------
+// Subscribe / Unsubscribe
+// ------------------------------------------
+const toggleSubscription = async () => {
+  if (!userId) return;
+
+  if (regStatus !== "Active") {
+    const confirmSub = window.confirm(
+      "By subscribing to Welfare, you are required to deposit KSh 200 every month. Failure to do so will result in KSh 200 being deducted from your savings automatically. Do you want to continue?"
+    );
+
+    if (!confirmSub) return;
+  }
+
+  setUpdatingStatus(true);
+
+  const newStatus = regStatus === "Active" ? "Inactive" : "Active";
+
+  const { data: existing } = await supabase
+    .from("wellfare")
+    .select("id")
+    .eq("member_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (existing) {
+    await supabase
+      .from("wellfare")
+      .update({ reg_status: newStatus })
+      .eq("id", existing.id);
+  } else {
+    await supabase.from("wellfare").insert({
+      member_id: userId,
+      amount: 0,
+      reg_status: newStatus,
+      status: "paid",
+    });
+  }
+
+  setRegStatus(newStatus);
+  setUpdatingStatus(false);
+};
   // ------------------------------------------
   // Fetch Paginated Welfare History
   // ------------------------------------------
@@ -108,6 +175,34 @@ const WelfareSection = () => {
         <p className="text-muted-foreground">Track your monthly welfare contributions</p>
       </div>
 
+{/* SUBSCRIPTION STATUS */}
+<Card>
+  <CardHeader>
+    <CardTitle>Welfare Subscription</CardTitle>
+  </CardHeader>
+  <CardContent className="flex items-center justify-between">
+    <div>
+      <p className="text-sm text-muted-foreground">Current Status</p>
+      <Badge
+        className={
+          regStatus === "Active"
+            ? "bg-green-500/20 text-green-600"
+            : "bg-red-500/20 text-red-600"
+        }
+      >
+        {regStatus || "Inactive"}
+      </Badge>
+    </div>
+
+    <Button
+      variant={regStatus === "Active" ? "destructive" : "default"}
+      onClick={toggleSubscription}
+      disabled={updatingStatus}
+    >
+      {regStatus === "Active" ? "Unsubscribe" : "Subscribe"}
+    </Button>
+  </CardContent>
+</Card>
       {/* SUMMARY CARDS */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>

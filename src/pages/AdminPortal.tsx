@@ -17,24 +17,84 @@ import AdminDashboardLayout from "@/components/admin/AdminDashboardLayout";
 const AdminPortal = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [session, setSession] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
+  const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Load existing session
-    const currentSession = supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+  const fetchRole = async (email: string) => {
+    const { data, error } = await supabase
+      .from("officials")
+      .select("role")
+      .eq("email_address", email)
+      .maybeSingle();
 
-    // Listen to auth changes (login/logout)
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    if (error) {
+      console.error(error);
+      return null;
+    }
+
+    return data?.role ?? null;
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const init = async () => {
+      setLoading(true);
+
+      // ✅ USE getSession (not getUser)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (!session?.user) {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      setUser(session.user);
+
+      if (session.user.email) {
+        const userRole = await fetchRole(session.user.email);
+
+        if (
+          !userRole ||
+          !["chairman", "secretary", "treasurer"].includes(userRole)
+        ) {
+          await supabase.auth.signOut();
+          setUser(null);
+          setRole(null);
+          toast.error("Unauthorized role");
+        } else {
+          setRole(userRole);
+        }
+      }
+
+      setLoading(false);
+    };
+
+    init();
+
+    // Listen to auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session?.user) {
+        setUser(null);
+        setRole(null);
+      } else {
+        setUser(session.user);
+      }
     });
 
     return () => {
-      listener.subscription.unsubscribe();
+      mounted = false;
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -53,43 +113,46 @@ const AdminPortal = () => {
       return;
     }
 
-    // Check if user is an official with allowed role
-    const { data: official, error: roleError } = await supabase
-      .from("officials")
-      .select("role")
-      .eq("email_address", email)
-      .single();
+    if (!data.user?.email) {
+      toast.error("Invalid login");
+      setLoading(false);
+      return;
+    }
 
-    if (roleError || !official) {
-      toast.error("Access denied!");
+    const userRole = await fetchRole(data.user.email);
+
+    if (
+      !userRole ||
+      !["chairman", "secretary", "treasurer"].includes(userRole)
+    ) {
+      toast.error("Unauthorized role");
       await supabase.auth.signOut();
       setLoading(false);
       return;
     }
 
-    if (!["chairman", "treasurer", "secretary"].includes(official.role)) {
-      toast.error("Unauthorized role: " + official.role);
-      await supabase.auth.signOut();
-      setLoading(false);
-      return;
-    }
-
+    setRole(userRole);
+    setUser(data.user);
     toast.success("Welcome back!");
-    setSession(data.session);
     setLoading(false);
   };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    setSession(null);
+    setUser(null);
+    setRole(null);
     navigate("/");
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-muted-foreground">Loading...</div>;
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Loading...
+      </div>
+    );
   }
 
-  if (!session) {
+  if (!user) {
     return (
       <Dialog open={true}>
         <DialogContent className="sm:max-w-md">
@@ -108,7 +171,6 @@ const AdminPortal = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
                 required
               />
             </div>
@@ -120,7 +182,6 @@ const AdminPortal = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
                 required
               />
             </div>
@@ -133,7 +194,11 @@ const AdminPortal = () => {
               >
                 {loading ? "Signing in..." : "Sign In"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => navigate("/")}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate("/")}
+              >
                 Cancel
               </Button>
             </div>
@@ -143,7 +208,7 @@ const AdminPortal = () => {
     );
   }
 
-  return <AdminDashboardLayout onLogout={handleLogout} />;
+  return <AdminDashboardLayout onLogout={handleLogout} role={role} />;
 };
 
 export default AdminPortal;

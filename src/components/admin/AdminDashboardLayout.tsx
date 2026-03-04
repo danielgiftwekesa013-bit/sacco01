@@ -13,16 +13,52 @@ import AdminDeductions from "@/components/admin/AdminDeductions";
 import AdminCashAnalysis from "@/components/admin/AdminCashAnalysis";
 import AdminUserManagement from "@/components/admin/AdminUserManagement";
 import AdminCashflow from "@/components/admin/AdminCashflow";
+
 interface AdminDashboardLayoutProps {
   onLogout: () => void;
+  role: string | null;
 }
 
-const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
+const AdminDashboardLayout = ({
+  onLogout,
+  role,
+}: AdminDashboardLayoutProps) => {
   const [activeSection, setActiveSection] = useState("dashboard");
 
   // Sidebar mobile open/close
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // Role permissions map
+  const rolePermissions: Record<string, string[]> = {
+    chairman: [
+      "dashboard",
+      "membership",
+      "welfare",
+      "shares",
+      "loans",
+      "daily-deposits",
+      "deductions",
+      "cash-analysis",
+      "cashflow",
+      "user-management",
+    ],
+    secretary: [
+      "dashboard",
+      "membership",
+      "loans",
+      "daily-deposits",
+    ],
+    treasurer: [
+      "dashboard",
+      "membership",
+      "loans",
+      "daily-deposits",
+    ],
+  };
+
+  const allowedSections =
+    role && rolePermissions[role] ? rolePermissions[role] : [];
 
   // Close sidebar when clicking outside (mobile only)
   useEffect(() => {
@@ -41,6 +77,14 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
   }, [isSidebarOpen]);
 
   const renderSection = () => {
+    if (!allowedSections.includes(activeSection)) {
+      return (
+        <div className="text-center text-red-500 p-10">
+          Access Denied
+        </div>
+      );
+    }
+
     switch (activeSection) {
       case "dashboard":
         return <AdminDashboardOverview />;
@@ -97,9 +141,13 @@ const AdminDashboardLayout = ({ onLogout }: AdminDashboardLayoutProps) => {
             `}
           >
             <AdminSidebar
+              role={role}
+              allowedSections={allowedSections}
               activeSection={activeSection}
               onSectionChange={(section) => {
-                setActiveSection(section);
+                if (allowedSections.includes(section)) {
+                  setActiveSection(section);
+                }
                 setIsSidebarOpen(false);
               }}
             />

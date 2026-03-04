@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 
 import {
-  // NOTE: we intentionally use SidebarContent and inner components only.
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
@@ -23,11 +22,18 @@ import {
 } from "@/components/ui/sidebar";
 
 interface AdminSidebarProps {
+  role: string | null;
+  allowedSections: string[];
   activeSection: string;
   onSectionChange: (section: string) => void;
 }
 
-const AdminSidebar = ({ activeSection, onSectionChange }: AdminSidebarProps) => {
+const AdminSidebar = ({
+  role,
+  allowedSections,
+  activeSection,
+  onSectionChange,
+}: AdminSidebarProps) => {
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "membership", label: "Membership", icon: Users },
@@ -41,6 +47,11 @@ const AdminSidebar = ({ activeSection, onSectionChange }: AdminSidebarProps) => 
     { id: "user-management", label: "Members & Accounts", icon: UserCheck },
   ];
 
+  // Filter menu items based on role permissions
+  const filteredMenuItems = menuItems.filter((item) =>
+    allowedSections.includes(item.id)
+  );
+
   return (
     <SidebarContent className="h-full bg-white">
       <SidebarGroup>
@@ -50,7 +61,7 @@ const AdminSidebar = ({ activeSection, onSectionChange }: AdminSidebarProps) => 
 
         <SidebarGroupContent>
           <SidebarMenu>
-            {menuItems.map((item) => (
+            {filteredMenuItems.map((item) => (
               <SidebarMenuItem key={item.id}>
                 <SidebarMenuButton
                   onClick={() => onSectionChange(item.id)}
