@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 
 type ReportType = "savings" | "loans" | "shares" | "all";
@@ -12,6 +14,7 @@ type ReportType = "savings" | "loans" | "shares" | "all";
 const FinancialReportsPage = () => {
   const [memberId, setMemberId] = useState<string | null>(null);
   const [memberName, setMemberName] = useState("");
+
   const [reportType, setReportType] = useState<ReportType>("savings");
 
   const [fromDate, setFromDate] = useState("");
@@ -21,6 +24,7 @@ const FinancialReportsPage = () => {
   const [loans, setLoans] = useState<any[]>([]);
   const [shares, setShares] = useState<any[]>([]);
 
+  /* ================= GET USER ================= */
   const getUser = async () => {
     const { data } = await supabase.auth.getUser();
     const uid = data?.user?.id;
@@ -42,6 +46,7 @@ const FinancialReportsPage = () => {
     getUser();
   }, []);
 
+  /* ================= FETCH SAVINGS ================= */
   const fetchSavings = async () => {
     if (!memberId) return;
 
@@ -56,18 +61,20 @@ const FinancialReportsPage = () => {
     setSavings(data ?? []);
   };
 
+  /* ================= FETCH LOANS ================= */
   const fetchLoans = async () => {
     if (!memberId) return;
 
     const { data } = await supabase
       .from("loans")
-      .select("reason, total_loan, loan_balance, time, due_date, approved_date, status")
+      .select("reason,total_loan,loan_balance,time,due_date,approved_date,status")
       .eq("member_id", memberId)
       .order("approved_date", { ascending: false });
 
     setLoans(data ?? []);
   };
 
+  /* ================= FETCH SHARES ================= */
   const fetchShares = async () => {
     if (!memberId) return;
 
@@ -81,7 +88,6 @@ const FinancialReportsPage = () => {
 
     if (!data) return;
 
-    // fetch receiver names
     const enriched = await Promise.all(
       data.map(async (s) => {
         if (!s.receiver) return { ...s, receiver_name: "-" };
@@ -102,36 +108,128 @@ const FinancialReportsPage = () => {
     setShares(enriched);
   };
 
+  /* ================= GENERATE REPORT ================= */
   const generateReport = async () => {
+
     if (reportType === "savings" || reportType === "all") {
       await fetchSavings();
     }
+
     if (reportType === "loans" || reportType === "all") {
       await fetchLoans();
     }
+
     if (reportType === "shares" || reportType === "all") {
       await fetchShares();
     }
   };
 
+  /* ================= DOWNLOAD PDF ================= */
+  const downloadPDF = () => {
+
+    const doc = new jsPDF();
+
+    doc.setFontSize(16);
+    doc.text("Transpiaggio SACCO Financial Statement", 14, 15);
+
+    doc.setFontSize(10);
+    doc.text(`Member: ${memberName}`, 14, 22);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+
+    let startY = 35;
+
+    /* SAVINGS PDF */
+    if (savings.length > 0) {
+
+      doc.text("Savings Statement", 14, startY);
+
+      autoTable(doc,{
+        startY: startY + 5,
+        head:[["Name","Date","Amount","Total"]],
+        body:savings.map((s)=>[
+          memberName,
+          s.deposit_date,
+          `KSh ${s.amount}`,
+          `KSh ${s.total_deposit}`
+        ]),
+        theme:"grid"
+      });
+
+      startY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    /* LOANS PDF */
+    if (loans.length > 0) {
+
+      doc.text("Loans Statement",14,startY);
+
+      autoTable(doc,{
+        startY:startY + 5,
+        head:[["Name","Loan","Total","Balance","Time","Due","Approved","Status"]],
+        body:loans.map((l)=>[
+          memberName,
+          l.reason,
+          `KSh ${l.total_loan}`,
+          `KSh ${l.loan_balance}`,
+          `${l.time} months`,
+          l.due_date,
+          l.approved_date,
+          l.status
+        ]),
+        theme:"grid"
+      });
+
+      startY = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    /* SHARES PDF */
+    if (shares.length > 0) {
+
+      doc.text("Shares Statement",14,startY);
+
+      autoTable(doc,{
+        startY:startY + 5,
+        head:[["Name","Deposit","Amount","Total","Transfer Date","Receiver","Transferred"]],
+        body:shares.map((s)=>[
+          memberName,
+          s.deposit_date,
+          `KSh ${s.amount}`,
+          `KSh ${s.total_shares}`,
+          s.transfer_date ?? "-",
+          s.receiver_name,
+          s.transfer_amount ?? "-"
+        ]),
+        theme:"grid"
+      });
+
+    }
+
+    doc.save("financial-statement.pdf");
+  };
+
   return (
-    <div className="space-y-6">
+
+    <div className="space-y-6 p-4 max-w-full">
 
       <div>
-        <h2 className="text-3xl font-bold">Financial Statements</h2>
-        <p className="text-muted-foreground">
+        <h2 className="text-2xl md:text-3xl font-bold">
+          Financial Statements
+        </h2>
+        <p className="text-muted-foreground text-sm">
           Preview and download your financial reports
         </p>
       </div>
 
-      {/* FILTER SECTION */}
+      {/* FILTERS */}
+
       <Card>
+
         <CardContent className="grid gap-4 md:grid-cols-4 p-6">
-          
+
           <select
-            className="border p-2 rounded-md"
+            className="border rounded-md p-2 w-full"
             value={reportType}
-            onChange={(e) => setReportType(e.target.value as ReportType)}
+            onChange={(e)=>setReportType(e.target.value as ReportType)}
           >
             <option value="savings">Savings</option>
             <option value="loans">Loans</option>
@@ -139,133 +237,212 @@ const FinancialReportsPage = () => {
             <option value="all">All</option>
           </select>
 
-          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <Input
+            type="date"
+            value={fromDate}
+            onChange={(e)=>setFromDate(e.target.value)}
+          />
 
-          <Button onClick={generateReport}>
-            Generate Report
-          </Button>
+          <Input
+            type="date"
+            value={toDate}
+            onChange={(e)=>setToDate(e.target.value)}
+          />
+
+          <div className="flex gap-2 flex-wrap">
+
+            <Button onClick={generateReport}>
+              Generate
+            </Button>
+
+            <Button
+              variant="secondary"
+              onClick={downloadPDF}
+            >
+              Download PDF
+            </Button>
+
+          </div>
 
         </CardContent>
+
       </Card>
 
       {/* SAVINGS TABLE */}
+
       {(reportType === "savings" || reportType === "all") && savings.length > 0 && (
-        <Card>
+
+        <Card className="border">
+
           <CardHeader>
             <CardTitle>Savings Statement</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Total</th>
+
+          <CardContent className="overflow-x-auto">
+
+            <table className="w-full text-sm border">
+
+              <thead className="bg-muted">
+
+                <tr>
+
+                  <th className="border p-2">Name</th>
+                  <th className="border p-2">Date</th>
+                  <th className="border p-2">Amount</th>
+                  <th className="border p-2">Total</th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {savings.map((s,i)=>(
+
+                  <tr key={i} className="border">
+
+                    <td className="border p-2">{memberName}</td>
+                    <td className="border p-2">{s.deposit_date}</td>
+                    <td className="border p-2">KSh {s.amount}</td>
+                    <td className="border p-2">KSh {s.total_deposit}</td>
+
                   </tr>
-                </thead>
-                <tbody>
-                  {savings.map((s, i) => (
-                    <tr key={i}>
-                      <td>{memberName}</td>
-                      <td>{s.deposit_date}</td>
-                      <td>KSh {s.amount}</td>
-                      <td>KSh {s.total_deposit}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
           </CardContent>
+
         </Card>
+
       )}
 
-      {/* LOANS TABLE */}
+      {/* LOANS */}
+
       {(reportType === "loans" || reportType === "all") && loans.length > 0 && (
-        <Card>
+
+        <Card className="border">
+
           <CardHeader>
             <CardTitle>Loans Statement</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Loan Purpose</th>
-                    <th>Total Loan</th>
-                    <th>Balance</th>
-                    <th>Repayment Period</th>
-                    <th>Due Date</th>
-                    <th>Approved Date</th>
-                    <th>Status</th>
+
+          <CardContent className="overflow-x-auto">
+
+            <table className="w-full text-sm border">
+
+              <thead className="bg-muted">
+
+                <tr>
+
+                  <th className="border p-2">Name</th>
+                  <th className="border p-2">Loan</th>
+                  <th className="border p-2">Total</th>
+                  <th className="border p-2">Balance</th>
+                  <th className="border p-2">Time</th>
+                  <th className="border p-2">Due</th>
+                  <th className="border p-2">Approved</th>
+                  <th className="border p-2">Status</th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {loans.map((l,i)=>(
+
+                  <tr key={i} className="border">
+
+                    <td className="border p-2">{memberName}</td>
+                    <td className="border p-2">{l.reason}</td>
+                    <td className="border p-2">KSh {l.total_loan}</td>
+                    <td className="border p-2">KSh {l.loan_balance}</td>
+                    <td className="border p-2">{l.time} months</td>
+                    <td className="border p-2">{l.due_date}</td>
+                    <td className="border p-2">{l.approved_date}</td>
+                    <td className="border p-2">{l.status}</td>
+
                   </tr>
-                </thead>
-                <tbody>
-                  {loans.map((l, i) => (
-                    <tr key={i}>
-                      <td>{memberName}</td>
-                      <td>{l.reason}</td>
-                      <td>KSh {l.total_loan}</td>
-                      <td>KSh {l.loan_balance}</td>
-                      <td>{l.time} months</td>
-                      <td>{l.due_date}</td>
-                      <td>{l.approved_date}</td>
-                      <td>{l.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
           </CardContent>
+
         </Card>
+
       )}
 
-      {/* SHARES TABLE */}
+      {/* SHARES */}
+
       {(reportType === "shares" || reportType === "all") && shares.length > 0 && (
-        <Card>
+
+        <Card className="border">
+
           <CardHeader>
             <CardTitle>Shares Statement</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Deposit Date</th>
-                    <th>Share Amount</th>
-                    <th>Total Shares</th>
-                    <th>Transfer Date</th>
-                    <th>Receiver</th>
-                    <th>Transfer Amount</th>
+
+          <CardContent className="overflow-x-auto">
+
+            <table className="w-full text-sm border">
+
+              <thead className="bg-muted">
+
+                <tr>
+
+                  <th className="border p-2">Name</th>
+                  <th className="border p-2">Deposit</th>
+                  <th className="border p-2">Amount</th>
+                  <th className="border p-2">Total</th>
+                  <th className="border p-2">Transfer Date</th>
+                  <th className="border p-2">Receiver</th>
+                  <th className="border p-2">Transferred</th>
+
+                </tr>
+
+              </thead>
+
+              <tbody>
+
+                {shares.map((s,i)=>(
+
+                  <tr key={i} className="border">
+
+                    <td className="border p-2">{memberName}</td>
+                    <td className="border p-2">{s.deposit_date}</td>
+                    <td className="border p-2">KSh {s.amount}</td>
+                    <td className="border p-2">KSh {s.total_shares}</td>
+                    <td className="border p-2">{s.transfer_date ?? "-"}</td>
+                    <td className="border p-2">{s.receiver_name}</td>
+                    <td className="border p-2">{s.transfer_amount ?? "-"}</td>
+
                   </tr>
-                </thead>
-                <tbody>
-                  {shares.map((s, i) => (
-                    <tr key={i}>
-                      <td>{memberName}</td>
-                      <td>{s.deposit_date}</td>
-                      <td>KSh {s.amount}</td>
-                      <td>KSh {s.total_shares}</td>
-                      <td>{s.transfer_date ?? "-"}</td>
-                      <td>{s.receiver_name}</td>
-                      <td>{s.transfer_amount ?? "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+
+                ))}
+
+              </tbody>
+
+            </table>
+
           </CardContent>
+
         </Card>
+
       )}
 
-      {/* FOOTER */}
-      <div className="text-center text-xs text-muted-foreground pt-10 border-t">
+      <div className="text-center text-xs text-muted-foreground pt-6 border-t">
+
         <p>All rights reserved by Transpiaggio Sacco</p>
         <p>Generated on {new Date().toLocaleString()}</p>
+
       </div>
 
     </div>
