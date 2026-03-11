@@ -24,6 +24,7 @@ interface LedgerRecord {
   amount: number;
   description: string | null;
   transaction_date: string;
+  created_at: string;
 }
 
 const AdminCashFlow = () => {
@@ -81,6 +82,7 @@ const AdminCashFlow = () => {
       .from("sacco_financial_ledger")
       .select("*", { count: "exact" })
       .order("transaction_date", { ascending: false })
+      .order("created_at", { ascending: false })
       .range(from, to);
 
     if (startDate && endDate) {
@@ -110,7 +112,8 @@ const downloadPDF = async () => {
   let query = supabase
     .from("sacco_financial_ledger")
     .select("*")
-    .order("transaction_date", { ascending: false });
+    .order("transaction_date", { ascending: false })
+    .order("created_at", { ascending: false });
 
   if (startDate && endDate) {
     query = query.gte("transaction_date", startDate).lte("transaction_date", endDate);
@@ -120,7 +123,6 @@ const downloadPDF = async () => {
 
   const records = data || [];
 
-  /* ===== CALCULATE TOTALS ===== */
   const totalIncome = records
     .filter((r) => r.transaction_type === "Income")
     .reduce((sum, r) => sum + Number(r.amount), 0);
@@ -133,12 +135,9 @@ const downloadPDF = async () => {
 
   const doc = new jsPDF();
 
-  /* ===== REPORT TITLE ===== */
   doc.setFontSize(16);
   doc.text("TRANSPIAGGIO SACCO", 14, 15);
-  
 
-  /* ===== DATE RANGE ===== */
   doc.setFontSize(10);
 
   if (startDate && endDate) {
@@ -147,17 +146,15 @@ const downloadPDF = async () => {
     doc.text("Date Range: All Records", 14, 22);
   }
 
-  /* ===== TOTALS SUMMARY ===== */
   doc.text(`Total Income: KSh ${totalIncome.toLocaleString()}`, 14, 30);
   doc.text(`Total Expense: KSh ${totalExpense.toLocaleString()}`, 14, 36);
   doc.text(`Net Cash Flow: KSh ${netFlow.toLocaleString()}`, 14, 42);
 
-  /* ===== TABLE ===== */
   autoTable(doc, {
     startY: 50,
     head: [["Date", "Type", "Source/Category", "Amount (KSh)", "Description"]],
     body: records.map((r) => [
-      r.transaction_date,
+      new Date(r.created_at).toLocaleString(),
       r.transaction_type,
       r.transaction_type === "Income"
         ? r.income_source
@@ -167,7 +164,6 @@ const downloadPDF = async () => {
     ]),
   });
 
-  /* ===== SAVE PDF ===== */
   doc.save("sacco-cashflow-report.pdf");
 };
 
@@ -368,7 +364,7 @@ const downloadPDF = async () => {
                   <tr key={r.id}>
 
                     <td className="border p-2">
-                      {r.transaction_date}
+                      {new Date(r.created_at).toLocaleString()}
                     </td>
 
                     <td className="border p-2">
@@ -396,8 +392,6 @@ const downloadPDF = async () => {
 
             </table>
           )}
-
-          {/* PAGINATION */}
 
           <div className="flex justify-between mt-4">
 
